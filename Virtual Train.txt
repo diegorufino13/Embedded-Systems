@@ -1,0 +1,330 @@
+/**
+ * Name: Diego Rufino
+ * Date: 7/6/2023
+ * Assignment: Lab 3 - Virtual Train
+ * Youtube: https://youtu.be/xEO3u01xsdU
+ * 
+ */
+
+
+
+
+
+#include <msp430.h>
+#include <stdbool.h>
+#include "Four_Digit_Display.h"
+#include <stdint.h>
+#define MCLK_FREQ_HZ 1000000
+#define TRAIN_DELAY_MS 1
+bool leftButtonFlag = false;
+bool rightButtonFlag = false;
+
+typedef enum {CWRUNNING, CCWRUNNING, STOP, MAX_STATES} state_t;
+
+typedef struct{
+    bool isLeftButtonPressed;
+    bool isRightButtonPressed;
+    uint8_t trainPosition;
+    uint16_t milliSeconds;
+} inputs_t;
+
+state_t runCWRunningState(inputs_t* inputs);
+state_t runCCWRunningState(inputs_t* inputs);
+state_t runStopState(inputs_t* inputs);
+
+void init();
+bool readLeftButtonPress();
+bool readRightButtonPress();
+void headOfTrain(uint8_t pos);
+void delay_ms(uint16_t millis);
+void RedLED(bool led);
+void GreenLED(bool led);
+
+
+    int main(void){
+    state_t currentState = STOP;
+    state_t nextState = currentState;
+
+    inputs_t inputs;
+    inputs.isLeftButtonPressed = false;
+    inputs.isRightButtonPressed = false;
+    inputs.trainPosition = 0;
+    inputs.milliSeconds = 0;
+
+
+    init();
+    four_digit_init();
+    display_segment(POS_1, SEG_A | SEG_F | SEG_E);
+
+
+    while(1){
+        switch(currentState){
+        case CCWRUNNING:
+            nextState = runCCWRunningState(&inputs);
+            break;
+        case STOP:
+            nextState = runStopState(&inputs);
+            break;
+        case CWRUNNING:
+            nextState = runCWRunningState(&inputs);
+            break;
+        }
+        inputs.isLeftButtonPressed = leftButtonFlag;
+        leftButtonFlag = false;
+        inputs.isRightButtonPressed = rightButtonFlag;
+        rightButtonFlag = false;
+        currentState=nextState;
+    }
+}
+////////////////////////////////////////////////////////
+
+void RedLED(bool led){
+    if (led){
+        P1OUT |= BIT0;
+    }
+    else {
+        P1OUT &= ~BIT0;
+    }
+}
+////////////////////////////////////////////////////////
+void GreenLED(bool led){
+    if (led){
+        P6OUT |= BIT6;
+    }
+    else {
+        P6OUT &= ~BIT6;
+    }
+}
+
+////////////////////////////////////////////////////////
+state_t runCWRunningState(inputs_t* inputs){
+        GreenLED(true);
+        RedLED(false);
+        headOfTrain(inputs->trainPosition);
+
+       delay_ms(1);
+        inputs->milliSeconds++;
+
+        if (inputs->milliSeconds > TRAIN_DELAY_MS){
+            inputs->trainPosition++;
+            inputs->milliSeconds=0;
+        }
+
+        if(inputs->trainPosition > 11)
+            inputs->trainPosition=0;
+
+        if (inputs->isLeftButtonPressed){
+            inputs->isLeftButtonPressed = false;
+            return STOP;
+        }
+
+        if (inputs->isRightButtonPressed){
+            inputs->isRightButtonPressed=false;
+            return CCWRUNNING;
+        }
+
+        else{
+                return CWRUNNING;
+            }
+}
+//////////////////////////////////////////////////////////
+state_t runCCWRunningState(inputs_t* inputs){
+        GreenLED(true);
+        RedLED(false);
+        headOfTrain(inputs->trainPosition);
+
+       delay_ms(1);
+        inputs->milliSeconds++;
+
+        if (inputs->milliSeconds > TRAIN_DELAY_MS){
+            inputs->trainPosition--;
+            inputs->milliSeconds=0;
+        }
+
+        if(inputs->trainPosition <= 0)
+            inputs->trainPosition= 11;
+
+        if (inputs->isLeftButtonPressed){
+            inputs->isLeftButtonPressed = false;
+            return STOP;
+        }
+        if (inputs->isRightButtonPressed){
+            inputs->isRightButtonPressed=false;
+            return CWRUNNING;
+        }
+
+        else{
+                return CCWRUNNING;
+            }
+}
+////////////////////////////////////////////////////////
+
+state_t runStopState(inputs_t* inputs){
+    GreenLED(false);
+    RedLED(true);
+    inputs->milliSeconds=0;
+
+    if (inputs->isLeftButtonPressed){
+        inputs->isLeftButtonPressed = false;
+        return CWRUNNING;
+    }
+    if (inputs->isRightButtonPressed){
+                inputs->isRightButtonPressed=false;
+                return CCWRUNNING;
+    }
+    else{
+        return STOP;
+    }
+}
+////////////////////////////////////////////////////////
+void delay_ms(uint16_t millis){
+    volatile uint16_t i;
+    for(i = 0; i < millis; i++){
+    __delay_cycles(MCLK_FREQ_HZ/1000);
+    }
+}
+////////////////////////////////////////////////////////
+void headOfTrain(uint8_t pos){
+    switch(pos){
+    case 0:
+        four_digit_clear();
+        display_segment(POS_1, SEG_A | SEG_F | SEG_E);
+        break;
+    case 1:
+        four_digit_clear();
+        display_segment(POS_1, SEG_A | SEG_F );
+        display_segment(POS_2, SEG_A );
+        break;
+    case 2:
+        four_digit_clear();
+        display_segment(POS_1, SEG_A );
+        display_segment(POS_2, SEG_A );
+        display_segment(POS_3, SEG_A );
+        break;
+    case 3:
+        four_digit_clear();
+        display_segment(POS_4, SEG_A );
+        display_segment(POS_2, SEG_A );
+        display_segment(POS_3, SEG_A );
+        break;
+    case 4:
+        four_digit_clear();
+        display_segment(POS_4, SEG_A | SEG_B);
+        display_segment(POS_3, SEG_A );
+        break;
+    case 5:
+        four_digit_clear();
+        display_segment(POS_4, SEG_A | SEG_B | SEG_C );
+        break;
+    case 6:
+        four_digit_clear();
+        display_segment(POS_4, SEG_D | SEG_B | SEG_C );
+        break;
+    case 7:
+         four_digit_clear();
+         display_segment(POS_4, SEG_C | SEG_D);
+         display_segment(POS_3, SEG_D );
+         break;
+    case 8:
+         four_digit_clear();
+         display_segment(POS_4, SEG_D );
+         display_segment(POS_2, SEG_D );
+         display_segment(POS_3, SEG_D );
+         break;
+    case 9:
+         four_digit_clear();
+         display_segment(POS_1, SEG_D );
+         display_segment(POS_2, SEG_D );
+         display_segment(POS_3, SEG_D );
+         break;
+    case 10:
+         four_digit_clear();
+         display_segment(POS_1, SEG_D | SEG_E);
+         display_segment(POS_2, SEG_D );
+         break;
+    case 11:
+         four_digit_clear();
+         display_segment(POS_1, SEG_D | SEG_F | SEG_E);
+         break;
+    default:
+        break;
+    }
+}
+/////////////////////////////////////////////////////
+bool readLeftButtonPress(){
+    if ((P4IN & BIT1) == 0x00){
+        delay_ms(100);
+    return (P4IN & BIT1) == 0x00;
+    }
+    return false;
+}
+
+////////////////////////////////////////////////////////
+bool readRightButtonPress(){
+    if ((P2IN & BIT3) == 0x00){
+        delay_ms(100);
+    return (P2IN & BIT3) == 0x00;
+    }
+    return false;
+}
+////////////////////////////////////////////////////////////
+void init(){
+    WDTCTL = WDTPW | WDTHOLD;   // stop watchdog time
+    PM5CTL0 &= ~LOCKLPM5; //Disable the GPIO power-on default high-impedance mode
+
+    //RED LED P1.0
+    P1DIR |= BIT0; // sets P1.0 as an output
+    P1OUT |= BIT0; // P1 output 0000 0001
+
+    //GREEN LED P6.6
+    P6DIR |= BIT6; //sets P6.6 as an output
+    P6OUT |= BIT6; //P6 output 0100 0000
+
+     //Button 4.1 SW1
+    P4DIR &= ~BIT1; //sets P4.1 as input 0
+    P4REN |= BIT1; //Enables P4.1 pull up resistor
+    P4OUT |= BIT1; //sets bit 1 as high to configure pull-up
+    P4IE |= BIT1;
+    P4IES |= BIT1;
+    P4IFG &= ~BIT1;
+    __enable_interrupt();
+
+
+
+    //Button 2.3 SW2
+    P2DIR &= ~BIT3;
+    P2REN |= BIT3;
+    P2OUT |= BIT3;
+    P2IE |= BIT3;
+    P2IES |= BIT3;
+    P2IFG &= ~BIT3;
+    __enable_interrupt();
+
+
+}
+////////////////////////////////////////////////////////
+#pragma vector=PORT4_VECTOR
+__interrupt void port4ISR(){
+    delay_ms(100);
+    leftButtonFlag = (P4IN & BIT1) == 0x00;
+
+    P4IFG &= ~BIT1;
+}
+
+////////////////////////////////////////////////////
+#pragma vector=PORT2_VECTOR
+__interrupt void port2ISR(){
+    delay_ms(100);
+    rightButtonFlag = (P2IN & BIT3) == 0x00;
+
+    P2IFG &= ~BIT3;
+}
+
+
+
+
+
+
+
+
+

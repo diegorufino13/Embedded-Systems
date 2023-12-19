@@ -1,0 +1,215 @@
+/*
+Diego Rufino
+Date: 7/31/2023
+Assignment: Lab 4 - Ultrasonic Alarm
+Youtube: https://youtu.be/6yc0BQevjEk
+rufino_diego_lab4
+*/
+#include <msp430.h>
+#include <stdbool.h>
+#include <stdint.h>
+#define MCLK_FREQ_HZ 1000000
+bool leftButtonFlag = false;
+
+typedef enum {INITIALIZE, ARMED, ALARM, MAX_STATES} state_t;
+
+typedef struct{
+    bool isLeftButtonPressed;
+
+} inputs_t;
+
+state_t runInitializeState(inputs_t* inputs);
+state_t runArmedState(inputs_t* inputs);
+state_t runAlarmState(inputs_t* inputs);
+
+void init();
+void buzzerOnOff();
+void soundOnOff(bool sound);
+void delay_ms(uint16_t millis);
+void RedLED(bool led);
+void GreenLED(bool led);
+bool readLeftButtonPress();
+float getDistance();
+
+
+
+
+int main(void){
+    state_t currentState = INITIALIZE;
+    state_t nextState = currentState;
+
+    inputs_t inputs;
+    inputs.isLeftButtonPressed = false;
+
+
+    init();
+    while(1){
+        switch(currentState){
+        case INITIALIZE:
+            nextState = runInitializeState(&inputs);
+            break;
+        case ARMED:
+            nextState = runArmedState(&inputs);
+            break;
+        case ALARM:
+            nextState = runAlarmState(&inputs);
+            break;
+        }
+        inputs.isLeftButtonPressed = leftButtonFlag;
+        leftButtonFlag = false;
+        currentState = nextState;
+    }
+}
+///////////////////////////////////////////////////////////////
+state_t runInitializeState(inputs_t* inputs){
+    soundOnOff(false);
+    RedLED(true);
+    GreenLED(false);
+
+    if (inputs->isLeftButtonPressed){
+        inputs->isLeftButtonPressed = false;
+        return ARMED;
+    }
+
+    else{
+        return INITIALIZE;
+    }
+}
+///////////////////////////////////////////////////////////////////////
+state_t runArmedState(inputs_t* inputs){
+    soundOnOff(false);
+    GreenLED(true);
+    RedLED(false);
+    volatile float setDistance = getDistance();
+
+    while (((setDistance - .25) || (setDistance + .25)) > getDistance()){
+        if (((setDistance - .25) || (setDistance + .25)) > getDistance()){
+            return ALARM;
+        }
+    }
+
+    if (inputs->isLeftButtonPressed){
+        inputs->isLeftButtonPressed = false;
+        return INITIALIZE;
+    }
+
+    else{
+        return ARMED;
+    }
+}
+/////////////////////////////////////////////////////////////////////////////
+state_t runAlarmState(inputs_t* inputs){
+    soundOnOff(true);
+
+    if (inputs->isLeftButtonPressed){
+        inputs->isLeftButtonPressed = false;
+        return INITIALIZE;
+    }
+
+    else{
+        return ALARM;
+    }
+}
+/////////////////////////////////////////////////////////////////////
+void init(){
+    WDTCTL = WDTPW | WDTHOLD;
+    PM5CTL0 &= ~LOCKLPM5;
+
+    //Buzzer
+    P1DIR |= BIT4;
+
+    //left button
+    P4DIR &= ~BIT1; //sets P4.1 as input 0
+    P4REN |= BIT1; //Enables P4.1 pull up resistor
+    P4OUT |= BIT1; //sets bit 1 as high to configure pull-up
+    P4IE |= BIT1;
+    P4IES |= BIT1;
+    P4IFG &= ~BIT1;
+    __enable_interrupt();
+
+    //RED LED P1.0
+    P1DIR |= BIT0; // sets P1.0 as an output
+    P1OUT |= BIT0; // P1 output 0000 0001
+
+    //GREEN LED P6.6
+    P6DIR |= BIT6; //sets P6.6 as an output
+    P6OUT |= BIT6; //P6 output 0100 0000
+}
+//////////////////////////////////////////////////////////////////
+bool readLeftButtonPress(){
+    if ((P4IN & BIT1) == 0x00){
+        delay_ms(100);
+        return (P4IN & BIT1) == 0x00;
+    }
+    return false;
+}
+
+/////////////////////////////////////////////
+void soundOnOff(bool sound){
+    if (sound){
+        P1OUT |= BIT4;
+    }
+    else{
+        P1OUT &= ~BIT4;
+    }
+}
+////////////////////////////////////////////////
+void delay_ms(uint16_t millis){
+    volatile uint16_t i;
+    for(i = 0; i < millis; i++){
+    __delay_cycles(MCLK_FREQ_HZ/1000);
+    }
+}
+////////////////////////////////////////////////////////
+float getDistance(){
+    TB0R = 0;
+    P6DIR |= BIT3;//output
+    P6OUT |= BIT3;//high
+    __delay_cycles(10);
+    P6OUT &= ~BIT3;//low
+    P6DIR &= ~BIT3;//input
+
+    while ((P6IN & BIT3) == 0x00);
+        if ((P6IN & BIT3) == BIT3 ){
+            TB0CTL = TBSSEL__SMCLK | MC__CONTINOUS;
+        }
+
+
+    while ((P6IN & BIT3) == 0x08 );
+        if ((P6IN & BIT3) == ~BIT3 ){
+            TB0CTL = TBSSEL__SMCLK | MC__STOP;
+        }
+
+    volatile float count = TB0R;
+    volatile float seconds = count / 1000000   ;
+    volatile float meters = (seconds * 343) / 2;
+    volatile float feet = meters * 3.28084;
+    return feet;
+
+}
+/////////////////////////////////////////////////////////
+#pragma vector=PORT4_VECTOR
+__interrupt void port4ISR(){
+    delay_ms(100);
+    leftButtonFlag = (P4IN & BIT1) == 0x00;
+
+    P4IFG &= ~BIT1;
+}
+////////////////////////////////////////////////////////////
+void RedLED(bool led){
+    if (led){
+        P1OUT |= BIT0;
+    }
+    else {
+        P1OUT &= ~BIT0;
+    }
+}
+////////////////////////////////////////////////////////
+void GreenLED(bool led){
+    if (led){
+        P6OUT |= BIT6;
+    }
+    else {
+        P6OUT &= ~BIT6;
+    }
+}
